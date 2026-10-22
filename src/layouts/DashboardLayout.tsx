@@ -21,6 +21,8 @@ import SummarizeIcon from '@mui/icons-material/Summarize';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import CreateIcon from '@mui/icons-material/Create';
 import ChatIcon from '@mui/icons-material/Chat';
+import PhotoCameraIcon from '@mui/icons-material/PhotoCamera';
+import SettingsIcon from '@mui/icons-material/Settings';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 
 const drawerWidth = 280;
@@ -112,8 +114,10 @@ export default function DashboardLayout() {
     { text: 'Translator & Detector', icon: <TranslateIcon />, path: '/translator' },
     { text: 'Summarizer', icon: <SummarizeIcon />, path: '/summarizer' },
     { text: 'Prompt', icon: <ChatIcon />, path: '/prompt' },
+    { text: 'Prompt (Multimodal)', icon: <PhotoCameraIcon />, path: '/multimodal' },
     { text: 'Writer & Rewriter', icon: <CreateIcon />, path: '/writer' },
     { text: 'Proofreader', icon: <AutoFixHighIcon />, path: '/proofreader' },
+    { text: 'API Status & Settings', icon: <SettingsIcon />, path: '/settings' },
   ];
 
   return (

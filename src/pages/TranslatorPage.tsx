@@ -11,15 +11,24 @@ import {
   Paper,
   Stack,
   keyframes,
+  Alert,
+  Chip,
+  LinearProgress,
+  CircularProgress,
+  FormControlLabel,
+  Switch,
 } from "@mui/material";
 import MicIcon from "@mui/icons-material/Mic";
 import TranslateIcon from "@mui/icons-material/Translate";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import VolumeUpIcon from "@mui/icons-material/VolumeUp";
+import StopIcon from "@mui/icons-material/Stop";
 import { IconButton, Tooltip, Divider } from "@mui/material";
 import type { SelectChangeEvent } from "@mui/material/Select";
 import { useDownloadProgress } from "../hooks/useDownloadProgress";
 import DownloadProgressBar from "../components/DownloadProgressBar";
+import { appendStreamChunk } from "../utils/streamUtils";
+import { checkAvailabilityWithTimeout, getAvailabilityBadgeProps } from "../utils/aiUtils";
 
 // Define Web Speech API interfaces
 interface SpeechRecognitionEvent extends Event {
@@ -46,8 +55,7 @@ interface SpeechRecognitionAlternative {
 }
 
 interface SpeechRecognition extends EventTarget {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  grammars: any;
+  grammars: unknown;
   lang: string;
   continuous: boolean;
   interimResults: boolean;
@@ -56,22 +64,17 @@ interface SpeechRecognition extends EventTarget {
   start(): void;
   stop(): void;
   abort(): void;
-  onaudiostart: ((this: SpeechRecognition, ev: Event) => any) | null;
-  onsoundstart: ((this: SpeechRecognition, ev: Event) => any) | null;
-  onspeechstart: ((this: SpeechRecognition, ev: Event) => any) | null;
-  onspeechend: ((this: SpeechRecognition, ev: Event) => any) | null;
-  onsoundend: ((this: SpeechRecognition, ev: Event) => any) | null;
-  onaudioend: ((this: SpeechRecognition, ev: Event) => any) | null;
-  onresult:
-    | ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => any)
-    | null;
-  onnomatch:
-    | ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => any)
-    | null;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  onerror: ((this: SpeechRecognition, ev: any) => any) | null;
-  onstart: ((this: SpeechRecognition, ev: Event) => any) | null;
-  onend: ((this: SpeechRecognition, ev: Event) => any) | null;
+  onaudiostart: ((this: SpeechRecognition, ev: Event) => void) | null;
+  onsoundstart: ((this: SpeechRecognition, ev: Event) => void) | null;
+  onspeechstart: ((this: SpeechRecognition, ev: Event) => void) | null;
+  onspeechend: ((this: SpeechRecognition, ev: Event) => void) | null;
+  onsoundend: ((this: SpeechRecognition, ev: Event) => void) | null;
+  onaudioend: ((this: SpeechRecognition, ev: Event) => void) | null;
+  onresult: ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => void) | null;
+  onnomatch: ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => void) | null;
+  onerror: ((this: SpeechRecognition, ev: Event) => void) | null;
+  onstart: ((this: SpeechRecognition, ev: Event) => void) | null;
+  onend: ((this: SpeechRecognition, ev: Event) => void) | null;
 }
 
 declare global {
@@ -80,6 +83,49 @@ declare global {
     webkitSpeechRecognition: { new (): SpeechRecognition };
   }
 }
+
+// Supported languages in Chrome's Translator implementation
+const SUPPORTED_LANGUAGES = [
+  { code: "ar", name: "Arabic" },
+  { code: "bg", name: "Bulgarian" },
+  { code: "bn", name: "Bengali" },
+  { code: "cs", name: "Czech" },
+  { code: "da", name: "Danish" },
+  { code: "de", name: "German" },
+  { code: "el", name: "Greek" },
+  { code: "en", name: "English" },
+  { code: "es", name: "Spanish" },
+  { code: "fi", name: "Finnish" },
+  { code: "fr", name: "French" },
+  { code: "he", name: "Hebrew" },
+  { code: "hi", name: "Hindi" },
+  { code: "hr", name: "Croatian" },
+  { code: "hu", name: "Hungarian" },
+  { code: "id", name: "Indonesian" },
+  { code: "it", name: "Italian" },
+  { code: "ja", name: "Japanese" },
+  { code: "kn", name: "Kannada" },
+  { code: "ko", name: "Korean" },
+  { code: "lt", name: "Lithuanian" },
+  { code: "mr", name: "Marathi" },
+  { code: "nl", name: "Dutch" },
+  { code: "no", name: "Norwegian" },
+  { code: "pl", name: "Polish" },
+  { code: "pt", name: "Portuguese" },
+  { code: "ro", name: "Romanian" },
+  { code: "ru", name: "Russian" },
+  { code: "sk", name: "Slovak" },
+  { code: "sl", name: "Slovenian" },
+  { code: "sv", name: "Swedish" },
+  { code: "ta", name: "Tamil" },
+  { code: "te", name: "Telugu" },
+  { code: "th", name: "Thai" },
+  { code: "tr", name: "Turkish" },
+  { code: "uk", name: "Ukrainian" },
+  { code: "vi", name: "Vietnamese" },
+  { code: "zh", name: "Chinese" },
+  { code: "zh-Hant", name: "Chinese (Traditional)" },
+];
 
 // Define animation
 const pulse = keyframes`
@@ -96,33 +142,65 @@ const pulse = keyframes`
 
 export default function TranslatorPage() {
   const [text, setText] = useState("");
+  const [sourceLanguage, setSourceLanguage] = useState("auto");
   const [targetLanguage, setTargetLanguage] = useState("es");
   const [translatedText, setTranslatedText] = useState("");
   const [listening, setListening] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(true);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [availability, setAvailability] = useState<string>("checking");
+
+  // Language Detection State
+  const [detectedResults, setDetectedResults] = useState<LanguageDetectionResult[]>([]);
+  const [activeSourceLang, setActiveSourceLang] = useState<string | null>(null);
+
   const recognitionRef = useRef<SpeechRecognition | null>(null);
-  const { downloadProgress, monitorCallback } = useDownloadProgress();
+  const detectorRef = useRef<LanguageDetector | null>(null);
+  const translatorRef = useRef<Translator | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const { downloadProgress, monitorCallback, resetProgress } = useDownloadProgress();
 
   useEffect(() => {
+    const checkAvailability = async () => {
+      if (!("Translator" in self)) {
+        setAvailability("unsupported");
+        return;
+      }
+      const avail = await checkAvailabilityWithTimeout(
+        Translator.availability({ sourceLanguage: "en", targetLanguage: "es" })
+      );
+      setAvailability(avail);
+    };
+    checkAvailability();
+
     return () => {
       if (recognitionRef.current) {
         recognitionRef.current.stop();
+      }
+      if (detectorRef.current) {
+        detectorRef.current.destroy();
+        detectorRef.current = null;
+      }
+      if (translatorRef.current) {
+        translatorRef.current.destroy();
+        translatorRef.current = null;
+      }
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
       }
     };
   }, []);
 
   const handleSpeak = (langName: string, langCode: string) => {
-    // Check if browser supports speech recognition
-    const SpeechRecognition =
+    const SpeechRecognitionClass =
       window.SpeechRecognition || window.webkitSpeechRecognition;
 
-    if (!SpeechRecognition) {
-      alert(
-        "Your browser does not support Speech Recognition. Please try Chrome."
-      );
+    if (!SpeechRecognitionClass) {
+      alert("Your browser does not support Speech Recognition. Please try Chrome.");
       return;
     }
 
-    // If already listening, stop it
     if (listening) {
       if (recognitionRef.current) {
         recognitionRef.current.stop();
@@ -130,7 +208,7 @@ export default function TranslatorPage() {
       return;
     }
 
-    const recognition = new SpeechRecognition();
+    const recognition = new SpeechRecognitionClass();
     recognition.lang = langCode;
     recognition.continuous = true;
     recognition.interimResults = true;
@@ -151,9 +229,8 @@ export default function TranslatorPage() {
       }
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    recognition.onerror = (event: any) => {
-      console.error("Speech recognition error", event.error);
+    recognition.onerror = (event: Event) => {
+      console.error("Speech recognition error", event);
       setListening(null);
     };
 
@@ -165,62 +242,126 @@ export default function TranslatorPage() {
     recognition.start();
   };
 
-  const detectLanguage = async (text: string) => {
+  const detectLanguage = async (input: string): Promise<string | null> => {
     if (!("LanguageDetector" in self)) {
-      return;
+      setStatusMessage("LanguageDetector API is not supported in this browser.");
+      return null;
     }
+
     const availability = await LanguageDetector.availability();
     if (availability === "unavailable") {
-      return;
+      setStatusMessage("LanguageDetector model is unavailable.");
+      return null;
     }
-    const detector = await LanguageDetector.create({
-      monitor: monitorCallback,
-    });
-    const results = await detector.detect(text);
-    for (const result of results) {
-      // Show the full list of potential languages with their likelihood, ranked
-      // from most likely to least likely. In practice, one would pick the top
-      // language(s) that cross a high enough threshold.
-      console.log(result.detectedLanguage, result.confidence);
+
+    if (!detectorRef.current) {
+      detectorRef.current = await LanguageDetector.create({
+        monitor: monitorCallback,
+      });
     }
-    return results.at(0)?.detectedLanguage;
+
+    const results = await detectorRef.current.detect(input);
+    setDetectedResults(results);
+    const topResult = results.at(0);
+    return topResult?.detectedLanguage || null;
   };
 
-  const translate = async (text: string, from: string, to: string) => {
-    if (!("Translator" in self)) {
-      return;
+  const handleStop = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+      setIsLoading(false);
     }
-    console.log(from, to);
-    const availability = await Translator.availability({
-      sourceLanguage: from,
-      targetLanguage: to,
-    });
-    if (availability === "unavailable") {
-      console.log("Model not available");
-      return;
-    }
-    const translator = await Translator.create({
-      sourceLanguage: from,
-      targetLanguage: to,
-      monitor: monitorCallback,
-    });
-    const result = await translator.translate(text);
-    console.log(result);
-    return result;
   };
 
   const handleTranslate = async () => {
-    console.log("Text:", text);
-    console.log("Target Language:", targetLanguage);
+    if (!text.trim()) return;
 
-    const detectedLanguage = await detectLanguage(text);
-    if (!detectedLanguage) {
-      console.log("Language Detection Failed!");
-      return;
-    }
-    const result = await translate(text, detectedLanguage, targetLanguage);
-    if (result) {
-      setTranslatedText(result);
+    setIsLoading(true);
+    setStatusMessage(null);
+    setTranslatedText("");
+
+    try {
+      let resolvedSource = sourceLanguage;
+      if (sourceLanguage === "auto") {
+        const detected = await detectLanguage(text);
+        if (!detected) {
+          setStatusMessage("Could not confidently detect language. Please select source language manually.");
+          setIsLoading(false);
+          return;
+        }
+        resolvedSource = detected;
+      }
+      setActiveSourceLang(resolvedSource);
+
+      if (!("Translator" in self)) {
+        setStatusMessage("Translator API is not supported in this browser.");
+        setIsLoading(false);
+        return;
+      }
+
+      const availability = await Translator.availability({
+        sourceLanguage: resolvedSource,
+        targetLanguage: targetLanguage,
+      });
+
+      if (availability === "unavailable") {
+        setStatusMessage(
+          `Translation from ${resolvedSource} to ${targetLanguage} is not supported or model is unavailable.`
+        );
+        setIsLoading(false);
+        return;
+      }
+
+      // Recreate translator if language pair changes or instance absent
+      if (
+        !translatorRef.current ||
+        translatorRef.current.sourceLanguage !== resolvedSource ||
+        translatorRef.current.targetLanguage !== targetLanguage
+      ) {
+        if (translatorRef.current) {
+          translatorRef.current.destroy();
+          translatorRef.current = null;
+        }
+
+        abortControllerRef.current = new AbortController();
+        translatorRef.current = await Translator.create({
+          sourceLanguage: resolvedSource,
+          targetLanguage: targetLanguage,
+          monitor: monitorCallback,
+          signal: abortControllerRef.current.signal,
+        });
+        resetProgress();
+      }
+
+      abortControllerRef.current = new AbortController();
+
+      if (isStreaming) {
+        let fullTranslated = "";
+        const stream = translatorRef.current.translateStreaming(text, {
+          signal: abortControllerRef.current.signal,
+        });
+        for await (const chunk of stream) {
+          fullTranslated = appendStreamChunk(fullTranslated, chunk);
+          setTranslatedText(fullTranslated);
+        }
+      } else {
+        const result = await translatorRef.current.translate(text, {
+          signal: abortControllerRef.current.signal,
+        });
+        setTranslatedText(result);
+      }
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === "AbortError") {
+        console.log("Translation aborted.");
+      } else {
+        console.error("Translation failed:", err);
+        const errMsg = err instanceof Error ? err.message : "Translation failed.";
+        setStatusMessage(errMsg);
+      }
+    } finally {
+      setIsLoading(false);
+      abortControllerRef.current = null;
     }
   };
 
@@ -234,58 +375,77 @@ export default function TranslatorPage() {
     if (!translatedText) return;
 
     const utterance = new SpeechSynthesisUtterance(translatedText);
-    // Map targetLanguage code (en, es, fr) to locale
-    switch (targetLanguage) {
-      case "en":
-        utterance.lang = "en-US";
-        break;
-      case "es":
-        utterance.lang = "es-ES";
-        break;
-      case "fr":
-        utterance.lang = "fr-FR";
-        break;
-      default:
-        utterance.lang = "en-US";
-    }
+    // Find locale prefix or fallback
+    utterance.lang = targetLanguage;
     window.speechSynthesis.speak(utterance);
   };
 
-  const handleLanguageChange = (event: SelectChangeEvent) => {
+  const handleTargetChange = (event: SelectChangeEvent) => {
     setTargetLanguage(event.target.value as string);
   };
 
+  const handleSourceChange = (event: SelectChangeEvent) => {
+    setSourceLanguage(event.target.value as string);
+  };
+
+  const getLanguageName = (code: string) => {
+    const lang = SUPPORTED_LANGUAGES.find((l) => l.code === code);
+    return lang ? lang.name : code;
+  };
+
   return (
-    <Box sx={{ maxWidth: 800, mx: "auto" }}>
-      <Typography variant="h4" gutterBottom sx={{ mb: 4, fontWeight: "bold" }}>
-        Translator & Language Detector
-      </Typography>
+    <Box sx={{ maxWidth: 850, mx: "auto" }}>
+      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
+        <Typography variant="h4" sx={{ fontWeight: "bold" }}>
+          Translator & Language Detector
+        </Typography>
+        <Chip
+          label={getAvailabilityBadgeProps(availability, "Translator").label}
+          color={getAvailabilityBadgeProps(availability, "Translator").color}
+          variant="outlined"
+        />
+      </Box>
+
+      {availability === "unsupported" && (
+        <Alert severity="warning" sx={{ mb: 3 }}>
+          Translator API is not enabled in this browser. Please use Chrome desktop (138+) and verify
+          on-device AI flags are enabled.
+        </Alert>
+      )}
+
+      {availability === "unavailable" && (
+        <Alert severity="error" sx={{ mb: 3 }}>
+          The Translator model is currently unavailable for this language pair. Verify that language packs are downloaded or visit the <strong>API Status & Settings</strong> tab.
+        </Alert>
+      )}
+
+      {statusMessage && (
+        <Alert severity="error" sx={{ mb: 3 }} onClose={() => setStatusMessage(null)}>
+          {statusMessage}
+        </Alert>
+      )}
 
       <Paper elevation={3} sx={{ p: 4, borderRadius: 2 }}>
         <TextField
           fullWidth
           multiline
-          rows={6}
+          rows={5}
           label="Enter text or speak"
           variant="outlined"
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="Type or speak..."
+          placeholder="Type or speak text here..."
           sx={{ mb: 3 }}
         />
 
-        <Stack
-          direction={{ xs: "column", sm: "row" }}
-          spacing={2}
-          sx={{ mb: 4 }}
-        >
+        {/* Quick Voice Input buttons */}
+        <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ mb: 3 }}>
           <Button
             variant={listening === "English" ? "contained" : "outlined"}
             startIcon={<MicIcon />}
             onClick={() => handleSpeak("English", "en-US")}
             sx={{
-              animation:
-                listening === "English" ? `${pulse} 1.5s infinite` : "none",
+              animation: listening === "English" ? `${pulse} 1.5s infinite` : "none",
               borderRadius: 20,
             }}
           >
@@ -296,8 +456,7 @@ export default function TranslatorPage() {
             startIcon={<MicIcon />}
             onClick={() => handleSpeak("Spanish", "es-ES")}
             sx={{
-              animation:
-                listening === "Spanish" ? `${pulse} 1.5s infinite` : "none",
+              animation: listening === "Spanish" ? `${pulse} 1.5s infinite` : "none",
               borderRadius: 20,
             }}
           >
@@ -308,8 +467,7 @@ export default function TranslatorPage() {
             startIcon={<MicIcon />}
             onClick={() => handleSpeak("French", "fr-FR")}
             sx={{
-              animation:
-                listening === "French" ? `${pulse} 1.5s infinite` : "none",
+              animation: listening === "French" ? `${pulse} 1.5s infinite` : "none",
               borderRadius: 20,
             }}
           >
@@ -317,34 +475,114 @@ export default function TranslatorPage() {
           </Button>
         </Stack>
 
-        <Box sx={{ display: "flex", gap: 2, alignItems: "center" }}>
-          <Button
-            variant="contained"
-            size="large"
-            startIcon={<TranslateIcon />}
-            onClick={handleTranslate}
-            sx={{ flexGrow: 1, py: 1.5 }}
-          >
-            Detect Language & Translate
-          </Button>
+        {/* Language Selection controls */}
+        <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ mb: 3 }}>
+          <FormControl fullWidth size="small">
+            <InputLabel id="source-lang-label">From</InputLabel>
+            <Select
+              labelId="source-lang-label"
+              id="source-lang-select"
+              value={sourceLanguage}
+              label="From"
+              onChange={handleSourceChange}
+            >
+              <MenuItem value="auto">✨ Auto-Detect</MenuItem>
+              {SUPPORTED_LANGUAGES.map((lang) => (
+                <MenuItem key={lang.code} value={lang.code}>
+                  {lang.name} ({lang.code})
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
 
-          <FormControl sx={{ minWidth: 150 }}>
-            <InputLabel id="target-lang-label">Translate to</InputLabel>
+          <FormControl fullWidth size="small">
+            <InputLabel id="target-lang-label">To</InputLabel>
             <Select
               labelId="target-lang-label"
               id="target-lang-select"
               value={targetLanguage}
-              label="Translate to"
-              onChange={handleLanguageChange}
+              label="To"
+              onChange={handleTargetChange}
             >
-              <MenuItem value="en">English</MenuItem>
-              <MenuItem value="es">Spanish</MenuItem>
-              <MenuItem value="fr">French</MenuItem>
+              {SUPPORTED_LANGUAGES.map((lang) => (
+                <MenuItem key={lang.code} value={lang.code}>
+                  {lang.name} ({lang.code})
+                </MenuItem>
+              ))}
             </Select>
           </FormControl>
+        </Stack>
+
+        {/* Action Buttons & Streaming toggle */}
+        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <Box sx={{ display: "flex", gap: 2 }}>
+            <Button
+              variant="contained"
+              size="large"
+              startIcon={isLoading ? <CircularProgress size={18} color="inherit" /> : <TranslateIcon />}
+              onClick={handleTranslate}
+              disabled={!text.trim() || isLoading}
+            >
+              {isLoading ? "Translating..." : "Translate"}
+            </Button>
+            {isLoading && (
+              <Button
+                variant="outlined"
+                color="error"
+                startIcon={<StopIcon />}
+                onClick={handleStop}
+                size="large"
+              >
+                Stop
+              </Button>
+            )}
+          </Box>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={isStreaming}
+                onChange={(e) => setIsStreaming(e.target.checked)}
+                color="primary"
+              />
+            }
+            label="Streaming Translation"
+          />
         </Box>
       </Paper>
 
+      {/* Language Detection Breakdown */}
+      {detectedResults.length > 0 && (
+        <Paper elevation={2} sx={{ p: 3, borderRadius: 2, mt: 3, bgcolor: "grey.50" }}>
+          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+            Detected Language Candidates:
+          </Typography>
+          <Stack spacing={1}>
+            {detectedResults.slice(0, 3).map((res, i) => {
+              const conf = res.confidence ? Math.round(res.confidence * 100) : 0;
+              return (
+                <Box key={i}>
+                  <Box sx={{ display: "flex", justifyContent: "space-between", mb: 0.5 }}>
+                    <Typography variant="body2" fontWeight={i === 0 ? "bold" : "normal"}>
+                      {getLanguageName(res.detectedLanguage || "unknown")} ({res.detectedLanguage})
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {conf}% confidence
+                    </Typography>
+                  </Box>
+                  <LinearProgress
+                    variant="determinate"
+                    value={conf}
+                    sx={{ height: 6, borderRadius: 3 }}
+                    color={i === 0 ? "primary" : "inherit"}
+                  />
+                </Box>
+              );
+            })}
+          </Stack>
+        </Paper>
+      )}
+
+      {/* Translated Result */}
       {translatedText && (
         <Paper
           elevation={3}
@@ -358,16 +596,21 @@ export default function TranslatorPage() {
               mb: 2,
             }}
           >
-            <Typography variant="h6" color="text.secondary">
-              Translation ({targetLanguage})
-            </Typography>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <Typography variant="h6" color="text.secondary">
+                Translation ({getLanguageName(targetLanguage)})
+              </Typography>
+              {activeSourceLang && (
+                <Chip
+                  size="small"
+                  label={`From: ${getLanguageName(activeSourceLang)}`}
+                  variant="outlined"
+                />
+              )}
+            </Box>
             <Box>
               <Tooltip title="Listen">
-                <IconButton
-                  onClick={handleAnnounce}
-                  color="primary"
-                  sx={{ mr: 1 }}
-                >
+                <IconButton onClick={handleAnnounce} color="primary" sx={{ mr: 1 }}>
                   <VolumeUpIcon />
                 </IconButton>
               </Tooltip>
@@ -390,7 +633,7 @@ export default function TranslatorPage() {
 
       <DownloadProgressBar
         progress={downloadProgress}
-        label="Downloading Translation Model..."
+        label="Downloading Translation Model Pack..."
       />
     </Box>
   );

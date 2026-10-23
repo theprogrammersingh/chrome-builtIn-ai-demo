@@ -34,7 +34,11 @@ import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import MemoryIcon from "@mui/icons-material/Memory";
 import StorageIcon from "@mui/icons-material/Storage";
 import DevicesIcon from "@mui/icons-material/Devices";
+import GetAppIcon from "@mui/icons-material/GetApp";
+import SystemUpdateAltIcon from "@mui/icons-material/SystemUpdateAlt";
+import OfflinePinIcon from "@mui/icons-material/OfflinePin";
 import { checkAvailabilityWithTimeout } from "../utils/aiUtils";
+import { usePWA } from "../hooks/usePWA";
 
 interface ApiDiagnostic {
   id: string;
@@ -47,6 +51,19 @@ interface ApiDiagnostic {
 }
 
 export default function SettingsPage() {
+  const {
+    isInstallable,
+    isInstalled,
+    installApp,
+    offlineReady,
+    needRefresh,
+    isCheckingForUpdates,
+    updateStatus,
+    updateStatusMessage,
+    updateApp,
+    checkForUpdates,
+  } = usePWA();
+
   const [diagnostics, setDiagnostics] = useState<ApiDiagnostic[]>([]);
   const [isChecking, setIsChecking] = useState(false);
   const [deviceSpecs, setDeviceSpecs] = useState<{
@@ -524,6 +541,140 @@ export default function SettingsPage() {
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                   Min. 22 GB free volume recommended
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+        </Grid>
+      </Paper>
+
+      {/* Progressive Web App (PWA) & Offline Status */}
+      <Paper elevation={2} sx={{ p: 3, borderRadius: 2, mb: 4 }}>
+        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: { xs: "flex-start", sm: "center" }, flexDirection: { xs: "column", sm: "row" }, gap: 2, mb: 2.5 }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+            <GetAppIcon color="primary" sx={{ fontSize: 32 }} />
+            <Box>
+              <Typography variant="h6" sx={{ fontWeight: "bold" }}>
+                Progressive Web App (PWA) & Offline Capabilities
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Install as a standalone app and manage Service Worker caching and updates.
+              </Typography>
+            </Box>
+          </Box>
+          <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
+            {isInstallable && (
+              <Button
+                variant="contained"
+                color="primary"
+                startIcon={<GetAppIcon />}
+                onClick={installApp}
+                sx={{ textTransform: "none", fontWeight: "bold" }}
+              >
+                Install App
+              </Button>
+            )}
+            <Button
+              variant="outlined"
+              startIcon={isCheckingForUpdates ? <CircularProgress size={16} /> : <SystemUpdateAltIcon />}
+              onClick={checkForUpdates}
+              disabled={isCheckingForUpdates}
+              sx={{ textTransform: "none" }}
+            >
+              {isCheckingForUpdates ? "Checking..." : "Check for Updates"}
+            </Button>
+          </Box>
+        </Box>
+
+        {updateStatusMessage && (
+          <Alert
+            severity={
+              updateStatus === "update-available"
+                ? "info"
+                : updateStatus === "latest"
+                ? "success"
+                : updateStatus === "error"
+                ? "error"
+                : "info"
+            }
+            sx={{ mb: 2.5 }}
+            action={
+              needRefresh ? (
+                <Button color="primary" size="small" variant="contained" onClick={updateApp}>
+                  Apply Update Now
+                </Button>
+              ) : undefined
+            }
+          >
+            {updateStatusMessage}
+          </Alert>
+        )}
+
+        <Grid container spacing={2}>
+          <Grid size={{ xs: 12, md: 4 }}>
+            <Card variant="outlined">
+              <CardContent sx={{ p: 2 }}>
+                <Typography variant="caption" color="text.secondary" fontWeight="bold">
+                  INSTALLATION STATUS
+                </Typography>
+                <Box sx={{ mt: 1, display: "flex", alignItems: "center", gap: 1 }}>
+                  {isInstalled ? (
+                    <Chip icon={<CheckCircleIcon />} label="Installed (Standalone)" color="success" size="small" />
+                  ) : isInstallable ? (
+                    <Chip icon={<GetAppIcon />} label="Ready to Install" color="primary" size="small" />
+                  ) : (
+                    <Chip label="Running in Browser" color="default" size="small" />
+                  )}
+                </Box>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                  {isInstalled
+                    ? "Running with dedicated window and dock integration."
+                    : isInstallable
+                    ? "Click 'Install App' to add this playground to your OS apps."
+                    : "Can also be installed via Chrome menu (⋮ > Save and Share > Install page as app)."}
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+
+          <Grid size={{ xs: 12, md: 4 }}>
+            <Card variant="outlined">
+              <CardContent sx={{ p: 2 }}>
+                <Typography variant="caption" color="text.secondary" fontWeight="bold">
+                  OFFLINE SERVICE WORKER
+                </Typography>
+                <Box sx={{ mt: 1 }}>
+                  <Chip
+                    icon={<OfflinePinIcon />}
+                    label={offlineReady ? "Offline Ready" : "Active & Cached"}
+                    color="success"
+                    size="small"
+                  />
+                </Box>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                  Scripts, assets, and UI are stored in local CacheStorage. Gemini Nano models also run completely on-device without internet.
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+
+          <Grid size={{ xs: 12, md: 4 }}>
+            <Card variant="outlined">
+              <CardContent sx={{ p: 2 }}>
+                <Typography variant="caption" color="text.secondary" fontWeight="bold">
+                  VERSION & UPDATE STATUS
+                </Typography>
+                <Box sx={{ mt: 1 }}>
+                  {needRefresh ? (
+                    <Chip icon={<SystemUpdateAltIcon />} label="New Update Ready" color="warning" size="small" />
+                  ) : updateStatus === "checking" ? (
+                    <Chip label="Checking for updates..." color="info" size="small" />
+                  ) : (
+                    <Chip icon={<CheckCircleIcon />} label="Up to Date" color="success" size="small" />
+                  )}
+                </Box>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                  Automatic update checks occur periodically. Trigger an on-demand check any time with &apos;Check for Updates&apos;.
                 </Typography>
               </CardContent>
             </Card>

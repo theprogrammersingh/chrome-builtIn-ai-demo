@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0d47a1" />
+      <stop offset="50%" stop-color="#1565c0" />
+      <stop offset="100%" stop-color="#1976d2" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="12" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)" />
+  <!-- Gemini primary spark -->
+  <path d="M 256,96 C 256,184 184,256 96,256 C 184,256 256,328 256,416 C 256,328 328,256 416,256 C 328,256 256,184 256,96 Z" fill="#ffffff" filter="url(#glow)" />
+  <!-- Gemini secondary spark -->
+  <path d="M 390,80 C 390,115 361,144 326,144 C 361,144 390,173 390,208 C 390,173 419,144 454,144 C 419,144 390,115 390,80 Z" fill="#90caf9" />
+</svg>

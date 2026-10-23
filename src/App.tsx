@@ -1,4 +1,5 @@
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { PWAProvider } from './context/PWAContext';
 import DashboardLayout from './layouts/DashboardLayout';
 import TranslatorPage from './pages/TranslatorPage';
 import SummarizerPage from './pages/SummarizerPage';
@@ -10,20 +11,22 @@ import SettingsPage from './pages/SettingsPage';
 
 function App() {
   return (
-    <HashRouter>
-      <Routes>
-        <Route path="/" element={<DashboardLayout />}>
-          <Route index element={<Navigate to="/translator" replace />} />
-          <Route path="translator" element={<TranslatorPage />} />
-          <Route path="summarizer" element={<SummarizerPage />} />
-          <Route path="prompt" element={<PromptPage />} />
-          <Route path="multimodal" element={<MultimodalPromptPage />} />
-          <Route path="writer" element={<WriterRewriterPage />} />
-          <Route path="proofreader" element={<ProofreaderPage />} />
-          <Route path="settings" element={<SettingsPage />} />
-        </Route>
-      </Routes>
-    </HashRouter>
+    <PWAProvider>
+      <HashRouter>
+        <Routes>
+          <Route path="/" element={<DashboardLayout />}>
+            <Route index element={<Navigate to="/translator" replace />} />
+            <Route path="translator" element={<TranslatorPage />} />
+            <Route path="summarizer" element={<SummarizerPage />} />
+            <Route path="prompt" element={<PromptPage />} />
+            <Route path="multimodal" element={<MultimodalPromptPage />} />
+            <Route path="writer" element={<WriterRewriterPage />} />
+            <Route path="proofreader" element={<ProofreaderPage />} />
+            <Route path="settings" element={<SettingsPage />} />
+          </Route>
+        </Routes>
+      </HashRouter>
+    </PWAProvider>
   );
 }
 

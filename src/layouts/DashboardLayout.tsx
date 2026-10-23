@@ -23,7 +23,15 @@ import CreateIcon from '@mui/icons-material/Create';
 import ChatIcon from '@mui/icons-material/Chat';
 import PhotoCameraIcon from '@mui/icons-material/PhotoCamera';
 import SettingsIcon from '@mui/icons-material/Settings';
+import GetAppIcon from '@mui/icons-material/GetApp';
+import SystemUpdateAltIcon from '@mui/icons-material/SystemUpdateAlt';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
+import Tooltip from '@mui/material/Tooltip';
+import CircularProgress from '@mui/material/CircularProgress';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { usePWA } from '../hooks/usePWA';
 
 const drawerWidth = 280;
 
@@ -102,6 +110,16 @@ export default function DashboardLayout() {
   const navigate = useNavigate();
   const location = useLocation();
 
+  const {
+    isInstallable,
+    isInstalled,
+    installApp,
+    isCheckingForUpdates,
+    checkForUpdates,
+    needRefresh,
+    updateApp,
+  } = usePWA();
+
   const handleDrawerOpen = () => {
     setOpen(true);
   };
@@ -137,9 +155,81 @@ export default function DashboardLayout() {
           >
             <MenuIcon />
           </IconButton>
-          <Typography variant="h6" noWrap component="div">
-            AI Dashboard
+          <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1, fontWeight: 'bold' }}>
+            Chrome Built-in AI Playground
           </Typography>
+
+          {/* PWA Install Button */}
+          {isInstallable && (
+            <Button
+              color="inherit"
+              variant="outlined"
+              size="small"
+              startIcon={<GetAppIcon />}
+              onClick={installApp}
+              sx={{
+                mr: 1.5,
+                textTransform: 'none',
+                fontWeight: 'bold',
+                borderColor: 'rgba(255, 255, 255, 0.7)',
+                bgcolor: 'rgba(255, 255, 255, 0.12)',
+                '&:hover': {
+                  borderColor: '#fff',
+                  bgcolor: 'rgba(255, 255, 255, 0.22)',
+                },
+              }}
+            >
+              Install App
+            </Button>
+          )}
+
+          {/* Standalone Installed Badge */}
+          {isInstalled && (
+            <Chip
+              icon={<CheckCircleOutlineIcon style={{ color: '#fff' }} />}
+              label="PWA App"
+              size="small"
+              sx={{
+                mr: 1.5,
+                color: '#fff',
+                bgcolor: 'rgba(255, 255, 255, 0.18)',
+                fontWeight: 500,
+              }}
+            />
+          )}
+
+          {/* Update Available Quick Action */}
+          {needRefresh && (
+            <Button
+              color="warning"
+              variant="contained"
+              size="small"
+              startIcon={<SystemUpdateAltIcon />}
+              onClick={updateApp}
+              sx={{ mr: 1, textTransform: 'none', fontWeight: 'bold' }}
+            >
+              Update Ready
+            </Button>
+          )}
+
+          {/* Check for Updates Icon Button */}
+          <Tooltip title={isCheckingForUpdates ? 'Checking for updates...' : 'Check for app updates'}>
+            <span>
+              <IconButton
+                color="inherit"
+                onClick={checkForUpdates}
+                disabled={isCheckingForUpdates}
+                size="medium"
+                aria-label="check for updates"
+              >
+                {isCheckingForUpdates ? (
+                  <CircularProgress size={20} color="inherit" />
+                ) : (
+                  <SystemUpdateAltIcon />
+                )}
+              </IconButton>
+            </span>
+          </Tooltip>
         </Toolbar>
       </AppBar>
       <Drawer variant="permanent" open={open}>

@@ -4,9 +4,12 @@
     "target": "ES2022",
     "useDefineForClassFields": true,
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "module": "ESNext",
-    "types": ["vite/client", "@types/dom-chromium-ai"],
-    "skipLibCheck": true,
+    "types": [
+      "vite/client",
+      "@types/dom-chromium-ai",
+      "vite-plugin-pwa/react",
+      "vite-plugin-pwa/client"
+    ],
 
     /* Bundler mode */
     "moduleResolution": "bundler",
